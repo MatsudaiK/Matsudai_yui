@@ -184,7 +184,7 @@
             };
 
             recognition.onresult = async (event) => {
-                const userText = event.results[0][0].transcript;
+                const userText = event.results.transcript;
                 setUIState('Thinking...', `You: "${userText}"`);
                 avatar.className = 'avatar-core thinking';
                 
@@ -206,7 +206,7 @@
             subtitles.innerText = "Speech recognition is not supported in this browser. Please use Chrome on Android.";
         }
 
-        // Updated, error-proof microphone toggle button logic
+        // Error-proof microphone toggle button logic
         micBtn.addEventListener('click', () => {
             if (!SpeechRecognition) return;
             
@@ -229,7 +229,7 @@
             subtitles.innerText = text;
         }
 
-        // Call the AI Brain
+        // Call the AI Brain (Updated patch specifically for Google's AQ. key format headers)
         async function getAIResponse(prompt) {
             const apiKey = apiKeyInput.value.trim();
             if (!apiKey) {
@@ -239,27 +239,39 @@
             }
 
             try {
-                const url = `https://googleapis.com{apiKey}`;
+                // Changed standard API endpoint URL to remove the exposed query key parameter
+                const url = `https://googleapis.com`;
                 
                 const response = await fetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': apiKey // Injected x-goog-api-key safety wrapper demanded by AQ. formats
+                    },
                     body: JSON.stringify({
                         contents: [{
                             parts: [{
-                                text: `You are Yui, an affectionate, helpful, and highly intelligent AI companion from Sword Art Online. Keep your answers brief, warm, and natural for a voice conversation. User says: ${prompt}`
+                                text: `You are Yui, an affectionate, helpful, and highly intelligent AI companion from Sword Art Online. Keep your answers brief, warm, and natural for a voice conversation.`
+                            }, {
+                                text: `User says: ${prompt}`
                             }]
                         }]
                     })
                 });
 
                 const data = await response.json();
-                const replyText = data.candidates[0].content.parts[0].text;
                 
+                // Safety logic check in case Google responds with a contextual error payload
+                if(data.error) {
+                    throw new Error(data.error.message);
+                }
+
+                const replyText = data.candidates[0].content.parts[0].text;
                 speak(replyText);
             } catch (err) {
+                console.error(err);
                 avatar.className = 'avatar-core';
-                setUIState('Error', 'Failed to reach the AI brain. Double-check your API key.');
+                setUIState('Error', 'Connection failed. Please check console logs or confirm key formatting permissions.');
             }
         }
 
@@ -271,18 +283,3 @@
             const utterance = new SpeechSynthesisUtterance(text);
             
             const voices = window.speechSynthesis.getVoices();
-            const femaleVoice = voices.find(v => v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('google us english') || v.lang.startsWith('en-'));
-            if (femaleVoice) utterance.voice = femaleVoice;
-
-            utterance.onend = () => {
-                avatar.className = 'avatar-core';
-                setUIState('Ready', 'Tap the mic to talk again.');
-            };
-
-            window.speechSynthesis.speak(utterance);
-        }
-
-        window.speechSynthesis.getVoices();
-    </script>
-</body>
-</html>
